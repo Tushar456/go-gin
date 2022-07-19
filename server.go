@@ -19,7 +19,7 @@ var (
 func main() {
 
 	server := gin.Default()
-	baspath := server.Group("/v1")
+	baspath := server.Group("/api/v1")
 	videoController.RegisterVideoRoutes(baspath)
 	userController.RegisterUserRoutes(baspath)
 	server.Run(":8080")
