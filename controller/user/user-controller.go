@@ -1,12 +1,18 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/Tushar456/go-gin/entity"
+	"github.com/Tushar456/go-gin/helper"
 	service "github.com/Tushar456/go-gin/service/user"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
+	"github.com/go-playground/validator/v10"
 )
+
+var validateError validator.ValidationErrors
 
 type UserController struct {
 	UserService service.UserService
@@ -20,12 +26,17 @@ func New(userservice service.UserService) UserController {
 
 func (uc *UserController) CreateUser(ctx *gin.Context) {
 	var user entity.User
-	if err := ctx.ShouldBindJSON(&user); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+	if err := ctx.ShouldBindBodyWith(&user, binding.JSON); err != nil {
+
+		if errors.As(err, &validateError) {
+			helper.CustomerValidateErrorMessage(ctx, validateError)
+			return
+		}
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	err := uc.UserService.Save(&user)
-	if err != nil {
+
+	if err := uc.UserService.Save(&user); err != nil {
 		ctx.JSON(http.StatusBadGateway, gin.H{"message": err.Error()})
 		return
 	}
@@ -54,8 +65,13 @@ func (uc *UserController) GetAll(ctx *gin.Context) {
 
 func (uc *UserController) UpdateUser(ctx *gin.Context) {
 	var user entity.User
-	if err := ctx.ShouldBindJSON(&user); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+	if err := ctx.ShouldBindBodyWith(&user, binding.JSON); err != nil {
+
+		if errors.As(err, &validateError) {
+			helper.CustomerValidateErrorMessage(ctx, validateError)
+			return
+		}
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	err := uc.UserService.Update(&user)
