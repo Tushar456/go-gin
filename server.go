@@ -20,6 +20,8 @@ func main() {
 
 	server := gin.Default()
 	baspath := server.Group("/api/v1")
+	baspath.GET("/ping", pingHandler)
+
 	videoController.RegisterVideoRoutes(baspath)
 	userController.RegisterUserRoutes(baspath)
 	server.Run(":8080")
