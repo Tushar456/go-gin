@@ -21,7 +21,7 @@ func (u *UserServiceImpl) Save(user *entity.User) error {
 
 	for _, us := range u.users {
 
-		if us.Name == user.Name {
+		if us.UserName == user.UserName {
 			return errors.New("user already exist")
 		}
 
@@ -30,12 +30,12 @@ func (u *UserServiceImpl) Save(user *entity.User) error {
 	return nil
 }
 
-func (u *UserServiceImpl) Get(name *string) (*entity.User, error) {
+func (u *UserServiceImpl) Get(username *string) (*entity.User, error) {
 	var findUser *entity.User
 
 	for _, user := range u.users {
 
-		if user.Name == *name {
+		if user.UserName == *username {
 			findUser = user
 			return findUser, nil
 		}
@@ -56,7 +56,7 @@ func (u *UserServiceImpl) GetAll() ([]*entity.User, error) {
 func (u *UserServiceImpl) Update(user *entity.User) error {
 	for i, us := range u.users {
 
-		if us.Name == user.Name {
+		if us.UserName == user.UserName {
 
 			u.users[i] = user
 			return nil
@@ -66,10 +66,10 @@ func (u *UserServiceImpl) Update(user *entity.User) error {
 	return errors.New("user not found")
 }
 
-func (u *UserServiceImpl) Delete(name *string) error {
+func (u *UserServiceImpl) Delete(username *string) error {
 	for i, us := range u.users {
 
-		if us.Name == *name {
+		if us.UserName == *username {
 			fmt.Println("inside")
 
 			u.users = append(u.users[:i], u.users[i+1:]...)
