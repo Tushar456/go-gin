@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"github.com/gin-gonic/gin"
 
 	"github.com/Tushar456/go-gin/entity"
 )
@@ -17,7 +18,7 @@ func NewUserService() UserService {
 	}
 }
 
-func (u *UserServiceImpl) Save(user *entity.User) error {
+func (u *UserServiceImpl) Save(ctx *gin.Context, user *entity.User) error {
 
 	for _, us := range u.users {
 
@@ -30,7 +31,7 @@ func (u *UserServiceImpl) Save(user *entity.User) error {
 	return nil
 }
 
-func (u *UserServiceImpl) Get(username *string) (*entity.User, error) {
+func (u *UserServiceImpl) Get(ctx *gin.Context, username *string) (*entity.User, error) {
 	var findUser *entity.User
 
 	for _, user := range u.users {
@@ -45,7 +46,7 @@ func (u *UserServiceImpl) Get(username *string) (*entity.User, error) {
 
 }
 
-func (u *UserServiceImpl) GetAll() ([]*entity.User, error) {
+func (u *UserServiceImpl) GetAll(ctx *gin.Context) ([]*entity.User, error) {
 	if len(u.users) == 0 {
 		return nil, errors.New("no user found")
 	}
@@ -53,7 +54,7 @@ func (u *UserServiceImpl) GetAll() ([]*entity.User, error) {
 
 }
 
-func (u *UserServiceImpl) Update(user *entity.User) error {
+func (u *UserServiceImpl) Update(ctx *gin.Context, user *entity.User) error {
 	for i, us := range u.users {
 
 		if us.UserName == user.UserName {
@@ -66,7 +67,7 @@ func (u *UserServiceImpl) Update(user *entity.User) error {
 	return errors.New("user not found")
 }
 
-func (u *UserServiceImpl) Delete(username *string) error {
+func (u *UserServiceImpl) Delete(ctx *gin.Context, username *string) error {
 	for i, us := range u.users {
 
 		if us.UserName == *username {

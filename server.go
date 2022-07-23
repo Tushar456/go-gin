@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/Tushar456/go-gin/controller"
 	ucontoller "github.com/Tushar456/go-gin/controller/user"
+	"github.com/Tushar456/go-gin/middleware"
 	"github.com/Tushar456/go-gin/service"
 	uservice "github.com/Tushar456/go-gin/service/user"
 	"github.com/Tushar456/go-gin/token"
@@ -22,17 +23,22 @@ const (
 )
 
 func main() {
-	token, err := token.NewJWTToken(tokenSymmetricKey)
+	jwtToken, err := token.NewJWTToken(tokenSymmetricKey)
 	if err != nil {
 		return
 	}
-	server := gin.Default()
-	baspath := server.Group("/api/v1")
-	baspath.GET("/ping", pingHandler)
+	router := gin.Default()
+	baseroute := router.Group("api/v1/user")
+	baseroute.POST("/create", userController.CreateUser)
+	baseroute.POST("/login", userController.LoginUser)
+	userroute := baseroute.Group("").Use(middleware.AuthMiddleware(jwtToken))
 
-	videoController.RegisterVideoRoutes(baspath)
-	userController.RegisterUserRoutes(baspath, token)
-	server.Run(":8080")
+	userroute.GET("/:username", userController.GetUser)
+	userroute.GET("", userController.GetAll)
+	userroute.DELETE("/:username", userController.DeleteUser)
+	userroute.PUT("", userController.UpdateUser)
+
+	router.Run(":8080")
 
 }
 

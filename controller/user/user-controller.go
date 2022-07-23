@@ -4,7 +4,6 @@ import (
 	"errors"
 	"github.com/Tushar456/go-gin/entity"
 	"github.com/Tushar456/go-gin/helper"
-	"github.com/Tushar456/go-gin/middleware"
 	service "github.com/Tushar456/go-gin/service/user"
 	"github.com/Tushar456/go-gin/token"
 	"github.com/gin-gonic/gin"
@@ -14,8 +13,12 @@ import (
 	"time"
 )
 
+const (
+	authorizationPayloadKey = "payload"
+	tokenSymmetricKey       = "12345678901234567890123456789012"
+)
+
 var validateError validator.ValidationErrors
-var jwtToken token.Token
 
 type UserController struct {
 	UserService service.UserService
@@ -39,7 +42,7 @@ func (uc *UserController) CreateUser(ctx *gin.Context) {
 		return
 	}
 
-	if err := uc.UserService.Save(&user); err != nil {
+	if err := uc.UserService.Save(ctx, &user); err != nil {
 		ctx.JSON(http.StatusBadGateway, gin.H{"message": err.Error()})
 		return
 	}
@@ -48,7 +51,13 @@ func (uc *UserController) CreateUser(ctx *gin.Context) {
 
 func (uc *UserController) GetUser(ctx *gin.Context) {
 	var username string = ctx.Param("username")
-	user, err := uc.UserService.Get(&username)
+	authPayload := ctx.MustGet(authorizationPayloadKey)
+	payload := authPayload.(*token.Payload)
+	if payload.Username != username && payload.Username != "admin" {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("user doesnot have write to access")))
+		return
+	}
+	user, err := uc.UserService.Get(ctx, &username)
 	if err != nil {
 		ctx.JSON(http.StatusBadGateway, gin.H{"message": err.Error()})
 		return
@@ -58,7 +67,14 @@ func (uc *UserController) GetUser(ctx *gin.Context) {
 }
 
 func (uc *UserController) GetAll(ctx *gin.Context) {
-	users, err := uc.UserService.GetAll()
+	authPayload := ctx.MustGet(authorizationPayloadKey)
+	payload := authPayload.(*token.Payload)
+	if payload.Username != "admin" {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("user doesnot have write to access")))
+		return
+	}
+
+	users, err := uc.UserService.GetAll(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusBadGateway, gin.H{"message": err.Error()})
 		return
@@ -77,7 +93,14 @@ func (uc *UserController) UpdateUser(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	err := uc.UserService.Update(&user)
+	authPayload := ctx.MustGet(authorizationPayloadKey)
+	payload := authPayload.(*token.Payload)
+	if payload.Username != user.UserName && payload.Username != "admin" {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("user doesnot have write to access")))
+		return
+	}
+
+	err := uc.UserService.Update(ctx, &user)
 	if err != nil {
 		ctx.JSON(http.StatusBadGateway, gin.H{"message": err.Error()})
 		return
@@ -87,7 +110,14 @@ func (uc *UserController) UpdateUser(ctx *gin.Context) {
 
 func (uc *UserController) DeleteUser(ctx *gin.Context) {
 	var username string = ctx.Param("username")
-	err := uc.UserService.Delete(&username)
+
+	authPayload := ctx.MustGet(authorizationPayloadKey)
+	payload := authPayload.(*token.Payload)
+	if payload.Username != username && payload.Username != "admin" {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("user doesnot have write to access")))
+		return
+	}
+	err := uc.UserService.Delete(ctx, &username)
 	if err != nil {
 		ctx.JSON(http.StatusNotFound, gin.H{"message": err.Error()})
 		return
@@ -107,13 +137,14 @@ type loginUserResponse struct {
 }
 
 func (uc *UserController) LoginUser(ctx *gin.Context) {
+	jwtToken, err := token.NewJWTToken(tokenSymmetricKey)
 	var req loginUserRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
 
-	user, err := uc.UserService.Get(&req.UserName)
+	user, err := uc.UserService.Get(ctx, &req.UserName)
 	if err != nil {
 		ctx.JSON(http.StatusBadGateway, gin.H{"message": err.Error()})
 		return
@@ -138,17 +169,16 @@ func (uc *UserController) LoginUser(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, rsp)
 }
 
-func (uc *UserController) RegisterUserRoutes(rg *gin.RouterGroup, token token.Token) {
-	jwtToken = token
-	userroute := rg.Group("/user")
-	userroute.POST("/create", uc.CreateUser)
-	userroute.POST("/login", uc.LoginUser)
-
-	userroute.GET("/:username", uc.GetUser).Use(middleware.AuthMiddleware(jwtToken))
-	userroute.GET("", uc.GetAll).Use(middleware.AuthMiddleware(jwtToken))
-	userroute.DELETE("/:username", uc.DeleteUser).Use(middleware.AuthMiddleware(jwtToken))
-	userroute.PUT("", uc.UpdateUser).Use(middleware.AuthMiddleware(jwtToken))
-}
+//func (uc *UserController) RegisterUserRoutes(rg *gin.RouterGroup, token token.Token) {
+//	jwtToken = token
+//	userroute := rg.Group("/user")
+//	userroute.GET("/:username", uc.GetUser).Use(middleware.AuthMiddleware(jwtToken))
+//	userroute.GET("", uc.GetAll).Use(middleware.AuthMiddleware(jwtToken))
+//	userroute.DELETE("/:username", uc.DeleteUser).Use(middleware.AuthMiddleware(jwtToken))
+//	userroute.PUT("", uc.UpdateUser).Use(middleware.AuthMiddleware(jwtToken))
+//	userroute.POST("/create", uc.CreateUser)
+//	userroute.POST("/login", uc.LoginUser)
+//}
 
 func errorResponse(err error) gin.H {
 	return gin.H{"error": err.Error()}
