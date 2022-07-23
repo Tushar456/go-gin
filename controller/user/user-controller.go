@@ -2,6 +2,7 @@ package controller
 
 import (
 	"errors"
+	"fmt"
 	"github.com/Tushar456/go-gin/entity"
 	"github.com/Tushar456/go-gin/helper"
 	service "github.com/Tushar456/go-gin/service/user"
@@ -9,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
 	"net/http"
 	"time"
 )
@@ -18,10 +20,29 @@ const (
 	tokenSymmetricKey       = "12345678901234567890123456789012"
 )
 
+type Session struct {
+	ID           uuid.UUID
+	Username     string
+	RefreshToken string
+	IsBlocked    bool
+	ExpiresAt    time.Time
+}
+
 var validateError validator.ValidationErrors
+
+var SessionMap = make(map[uuid.UUID]Session)
 
 type UserController struct {
 	UserService service.UserService
+}
+
+type renewAccessTokenRequest struct {
+	RefreshToken string `json:"refresh_token" binding:"required"`
+}
+
+type renewAccessTokenResponse struct {
+	AccessToken          string    `json:"access_token"`
+	AccessTokenExpiresAt time.Time `json:"access_token_expires_at"`
 }
 
 func New(userservice service.UserService) UserController {
@@ -132,8 +153,11 @@ type loginUserRequest struct {
 }
 
 type loginUserResponse struct {
-	AccessToken          string    `json:"access_token"`
-	AccessTokenExpiresAt time.Time `json:"access_token_expires_at"`
+	SessionID             uuid.UUID `json:"session_id"`
+	AccessToken           string    `json:"access_token"`
+	AccessTokenExpiresAt  time.Time `json:"access_token_expires_at"`
+	RefreshToken          string    `json:"refresh_token"`
+	RefreshTokenExpiresAt time.Time `json:"refresh_token_expires_at"`
 }
 
 func (uc *UserController) LoginUser(ctx *gin.Context) {
@@ -156,13 +180,90 @@ func (uc *UserController) LoginUser(ctx *gin.Context) {
 		return
 
 	}
-	accessToken, accessPayload, err := jwtToken.CreateToken(user.UserName, time.Duration(1)*time.Hour)
+	accessToken, accessPayload, err := jwtToken.CreateToken(user.UserName, time.Duration(5)*time.Minute)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, errorResponse(err))
 		return
 	}
 
+	refreshToken, refreshPayload, err := jwtToken.CreateToken(user.UserName, time.Duration(1)*time.Hour)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, errorResponse(err))
+		return
+	}
+	// create a seesion object
+	session := Session{
+		ID:           refreshPayload.ID,
+		Username:     user.UserName,
+		RefreshToken: refreshToken,
+		IsBlocked:    false,
+		ExpiresAt:    refreshPayload.ExpiredAt,
+	}
+	// storing in map need to store in db
+	SessionMap[session.ID] = session
+
 	rsp := loginUserResponse{
+		SessionID:             session.ID,
+		AccessToken:           accessToken,
+		AccessTokenExpiresAt:  accessPayload.ExpiredAt,
+		RefreshToken:          refreshToken,
+		RefreshTokenExpiresAt: refreshPayload.ExpiredAt,
+	}
+	ctx.JSON(http.StatusOK, rsp)
+}
+
+func (uc *UserController) RenewAccessToken(ctx *gin.Context) {
+	var req renewAccessTokenRequest
+	jwtToken, err := token.NewJWTToken(tokenSymmetricKey)
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	refreshPayload, err := jwtToken.VerifyToken(req.RefreshToken)
+	if err != nil {
+		ctx.JSON(http.StatusUnauthorized, errorResponse(err))
+		return
+	}
+
+	session, ok := SessionMap[refreshPayload.ID]
+	if !ok {
+
+		ctx.JSON(http.StatusInternalServerError, errorResponse(errors.New("seesion key not found")))
+		return
+	}
+
+	if session.IsBlocked {
+		err := fmt.Errorf("blocked session")
+		ctx.JSON(http.StatusUnauthorized, errorResponse(err))
+		return
+	}
+
+	if session.Username != refreshPayload.Username {
+		err := fmt.Errorf("incorrect session user")
+		ctx.JSON(http.StatusUnauthorized, errorResponse(err))
+		return
+	}
+
+	if session.RefreshToken != req.RefreshToken {
+		err := fmt.Errorf("mismatched session token")
+		ctx.JSON(http.StatusUnauthorized, errorResponse(err))
+		return
+	}
+
+	if time.Now().After(session.ExpiresAt) {
+		err := fmt.Errorf("expired session")
+		ctx.JSON(http.StatusUnauthorized, errorResponse(err))
+		return
+	}
+
+	accessToken, accessPayload, err := jwtToken.CreateToken(refreshPayload.Username, time.Duration(5)*time.Minute)
+
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, errorResponse(err))
+		return
+	}
+	rsp := renewAccessTokenResponse{
 		AccessToken:          accessToken,
 		AccessTokenExpiresAt: accessPayload.ExpiredAt,
 	}

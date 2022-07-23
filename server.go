@@ -31,6 +31,7 @@ func main() {
 	baseroute := router.Group("api/v1/user")
 	baseroute.POST("/create", userController.CreateUser)
 	baseroute.POST("/login", userController.LoginUser)
+	baseroute.POST("/token/renew", userController.RenewAccessToken)
 	userroute := baseroute.Group("").Use(middleware.AuthMiddleware(jwtToken))
 
 	userroute.GET("/:username", userController.GetUser)
